@@ -1,9 +1,6 @@
-"""Feasify: Real estate cost estimation tool for Mumbai/Pune regions."""
-__version__ = "0.1.0"
-__author__ = "Feasify Team"
-
-# Expose browser tools
-from .browser import (
+"""Camofox browser integration for Feasify - anti-detection browser tools."""
+from .client import CamofoxClient
+from .tools import (
     browser_create_tab,
     browser_snapshot,
     browser_click,
@@ -17,8 +14,9 @@ from .browser import (
 )
 
 __all__ = [
+    "CamofoxClient",
     "browser_create_tab",
-    "browser_snapshot",
+    "browser_snapshot", 
     "browser_click",
     "browser_type",
     "browser_screenshot",
