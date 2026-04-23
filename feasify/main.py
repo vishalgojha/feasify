@@ -97,6 +97,57 @@ def version():
 
 
 @app.command()
+def welcome():
+    """Launch interactive onboarding and open Studio."""
+    import subprocess
+    import webbrowser
+    import os
+    from pathlib import Path
+    
+    console.print("[bold cyan]🏠 Welcome to Feasify![/bold cyan]\n")
+    
+    # Run onboarding
+    console.print("[yellow]Starting setup wizard...[/yellow]\n")
+    subprocess.run([sys.executable, "-m", "feasify.onboarding"], check=False)
+    
+    # Open Studio
+    studio_path = Path(__file__).parent / "studio" / "app.py"
+    if studio_path.exists():
+        console.print("\n[green]🚀 Opening Feasify Studio...[/green]")
+        webbrowser.open("http://localhost:8501")
+        subprocess.Popen([
+            sys.executable, "-m", "streamlit", "run", 
+            str(studio_path),
+            "--browser.gatherUsageStats", "false",
+            "--server.headless", "true"
+        ])
+    else:
+        console.print("[red]Studio not found![/red]")
+
+
+@app.command()
+def studio():
+    """Launch Feasify Studio web interface."""
+    import subprocess
+    import webbrowser
+    from pathlib import Path
+    
+    studio_path = Path(__file__).parent / "studio" / "app.py"
+    if studio_path.exists():
+        console.print("[green]🚀 Starting Feasify Studio...[/green]")
+        console.print("[cyan]Open http://localhost:8501 in your browser[/cyan]\n")
+        webbrowser.open("http://localhost:8501")
+        subprocess.run([
+            sys.executable, "-m", "streamlit", "run",
+            str(studio_path),
+            "--browser.gatherUsageStats", "false",
+            "--server.headless", "true"
+        ])
+    else:
+        console.print("[red]Studio not found. Install Streamlit: pip install streamlit[/red]")
+
+
+@app.command()
 def swarm(
     cts_number: str = typer.Argument(..., help="CTS number to analyze"),
     zone: str = typer.Argument(..., help="Zone: island_city/suburbs/extended_suburbs/barc_area"),
