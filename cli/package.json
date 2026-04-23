@@ -1,0 +1,22 @@
+{
+  "name": "feasify-cli",
+  "version": "0.1.0",
+  "description": "Interactive CLI and API server for Feasify FSI Feasibility",
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts",
+    "dev": "bun run --watch index.ts",
+    "build": "bun build index.ts",
+    "server": "bun run server.ts",
+    "build:server": "bun build server.ts --outfile=feasify-server --target=bun"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "inquirer": "^10.2.2",
+    "axios": "^1.7.2"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "@types/inquirer": "^9.0.7"
+  }
+}

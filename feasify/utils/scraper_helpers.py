@@ -2,6 +2,7 @@
 import requests
 from typing import Optional, Dict, List
 from requests.exceptions import RequestException
+from bs4 import BeautifulSoup
 import time
 import random
 import logging

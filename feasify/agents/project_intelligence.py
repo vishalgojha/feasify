@@ -342,7 +342,8 @@ def dispatch_tool(name: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
             )
         
         elif name == "fetch_live_construction_cost":
-            return live_cost_calculator(
+            from feasify.agents.live_rates import calculate_live_construction_cost
+            return calculate_live_construction_cost(
                 area_sqft=inputs["area_sqft"],
                 zone_type=inputs["zone_type"],
                 num_floors=inputs["num_floors"],

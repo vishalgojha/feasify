@@ -16,7 +16,7 @@ from feasify.agents.constants import (
     GST_PCT,
 )
 from feasify.agents.live_rates import (
-    fetch_live_construction_cost as live_cost_calculator,
+    get_construction_rates,
 )
 import logging
 
@@ -99,7 +99,7 @@ def calculate_government_premiums(
     
     # Development cess (100% of DC on BUA above basic FSI)
     bua_above_basic = max(0, bua_sqm - (plot_area_sqm * zonal_basic_fsi))
-    development_cess = bua_above_basic * (asr_rate_per_sqm * MCgm_DEVELOPMENT_CESS_PCT)
+    development_cess = bua_above_basic * (asr_rate_per_sqm * MCGM_DEVELOPMENT_CESS_PCT)
     
     # Infrastructure levy (MCGM charge per sq.m on BUA above basic)
     infrastructure_levy = bua_above_basic * MCGM_INFRA_LEVY_PER_SQM
@@ -229,9 +229,11 @@ def build_cost_stack(
         except Exception as e:
             logger.warning(f"Failed to fetch live rates: {e}. Using PWD rates.")
     
+    bua_sqm = bua_sqft / 10.764
+    
     # Government premiums
     gov_premiums = calculate_government_premiums(
-        plot_area_sqm, bua_sqft / 10.764, fsi_used, zonal_basic_fsi, fungible_sqm, use
+        plot_area_sqm, bua_sqm, fsi_used, zonal_basic_fsi, fungible_sqm, use
     )
     
     # Professional fees
@@ -266,7 +268,7 @@ def build_cost_stack(
         "construction": {
             "base_construction": round(base_construction_cost, 2),
             "total_construction": round(total_construction, 2),
-            "rate_source": live["rate_source"] if use_live_rates else "PWD_RATES",
+            "rate_source": live.get("base_rate_source", "PWD_RATES") if use_live_rates else "PWD_RATES",
             "material_prices": live.get("material_prices") if use_live_rates else None,
         },
         "government_premiums": gov_premiums,

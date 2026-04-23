@@ -55,3 +55,10 @@ logs/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Bun CLI build artifacts
+cli/index.js
+cli/server-test.js
+cli/feasify-server
+cli/*.bun
+
