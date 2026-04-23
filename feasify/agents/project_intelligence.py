@@ -1,4 +1,4 @@
-"""Project Intelligence Agent - Claude-powered feasibility analysis."""
+"""Project Intelligence Agent - Groq-powered feasibility analysis."""
 import os
 import json
 import logging
@@ -7,10 +7,10 @@ from pathlib import Path
 from datetime import datetime
 
 try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
+    from groq import Groq
+    GROQ_AVAILABLE = True
 except ImportError:
-    ANTHROPIC_AVAILABLE = False
+    GROQ_AVAILABLE = False
 
 try:
     from rich.console import Console
@@ -63,137 +63,164 @@ Be specific. Use numbers. Flag contradictions. If a clearance makes the project 
 If data is missing (e.g. road width not on record), state your assumption and its impact.
 """
 
-# Tool definitions for Claude
+# Tool definitions for Groq (OpenAI-compatible format)
 TOOLS = [
     {
-        "name": "resolve_cts",
-        "description": "Fetch plot details from MCGM for a CTS number. Returns plot area, ward, address, zone designation.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "cts_number": {"type": "string"}
-            },
-            "required": ["cts_number"]
-        }
-    },
-    {
-        "name": "get_spatial_context",
-        "description": "Given an address or lat/long, compute distance to CSIA airport, JNPA airport, nearest coastline, and flag heritage ward or railway buffer ward.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "address": {"type": "string"},
-                "lat": {"type": "number"},
-                "lng": {"type": "number"}
+        "type": "function",
+        "function": {
+            "name": "resolve_cts",
+            "description": "Fetch plot details from MCGM for a CTS number. Returns plot area, ward, address, zone designation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cts_number": {"type": "string"}
+                },
+                "required": ["cts_number"]
             }
         }
     },
     {
-        "name": "calculate_feasibility",
-        "description": "Run DCPR-2034 feasibility analysis. Returns permissible BUA, FSI, height, setbacks, parking, tenements.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "plot_area_sqm": {"type": "number"},
-                "zone": {"type": "string", "enum": ["island_city", "suburbs", "extended_suburbs", "barc_area", "crz_affected"]},
-                "use": {"type": "string", "enum": ["residential", "commercial", "industrial"]},
-                "road_width_m": {"type": "number"},
-                "floors": {"type": "integer"},
-                "include_fungible": {"type": "boolean"}
-            },
-            "required": ["plot_area_sqm", "zone", "use", "road_width_m", "floors"]
+        "type": "function",
+        "function": {
+            "name": "get_spatial_context",
+            "description": "Given an address or lat/long, compute distance to CSIA airport, NMIA airport, nearest coastline, and flag heritage ward or railway buffer ward.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "address": {"type": "string"},
+                    "lat": {"type": "number"},
+                    "lng": {"type": "number"}
+                }
+            }
         }
     },
     {
-        "name": "estimate_construction_cost",
-        "description": "Estimate construction cost using PWD rates. Returns base cost, contingency, overhead, total.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "area_sqft": {"type": "number"},
-                "zone_type": {"type": "string"},
-                "num_floors": {"type": "integer"},
-                "finish_grade": {"type": "string", "enum": ["basic", "standard", "premium"]}
-            },
-            "required": ["area_sqft", "zone_type", "num_floors"]
+        "type": "function",
+        "function": {
+            "name": "calculate_feasibility",
+            "description": "Run DCPR-2034 feasibility analysis. Returns permissible BUA, FSI, height, setbacks, parking, tenements.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "plot_area_sq_m": {"type": "number"},
+                    "zone": {"type": "string", "enum": ["island_city", "suburbs", "extended_suburbs", "barc_area", "crz_affected"]},
+                    "use": {"type": "string", "enum": ["residential", "commercial", "industrial"]},
+                    "road_width_m": {"type": "number"},
+                    "floors": {"type": "integer"},
+                    "include_fungible": {"type": "boolean"}
+                },
+                "required": ["plot_area_sq_m", "zone", "use", "road_width_m", "floors"]
+            }
         }
     },
     {
-        "name": "resolve_clearances",
-        "description": "Given plot spatial context and derived design parameters, return all triggered clearances with fees, timelines, and risk levels.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "height_m": {"type": "number"},
-                "bua_sqm": {"type": "number"},
-                "plot_area_sqm": {"type": "number"},
-                "distance_to_csia_km": {"type": "number"},
-                "distance_to_coast_km": {"type": "number"},
-                "ward": {"type": "string"},
-                "use": {"type": "string"}
-            },
-            "required": ["height_m", "bua_sqm", "plot_area_sqm", "use"]
+        "type": "function",
+        "function": {
+            "name": "estimate_construction_cost",
+            "description": "Estimate construction cost using PWD rates. Returns base cost, contingency, overhead, total.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area_sqft": {"type": "number"},
+                    "zone_type": {"type": "string"},
+                    "num_floors": {"type": "integer"},
+                    "finish_grade": {"type": "string", "enum": ["basic", "standard", "premium"]}
+                },
+                "required": ["area_sqft", "zone_type", "num_floors"]
+            }
         }
     },
     {
-        "name": "calculate_government_premiums",
-        "description": "Calculate all government levies — premium FSI charge, fungible premium, development cess, infrastructure charges, IOD/CC/OC fees, labour cess.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "plot_area_sqm": {"type": "number"},
-                "bua_sqm": {"type": "number"},
-                "fsi_used": {"type": "number"},
-                "zonal_basic_fsi": {"type": "number"},
-                "fungible_sqm": {"type": "number"},
-                "use": {"type": "string"},
-                "asr_rate_per_sqm": {"type": "number"}
-            },
-            "required": ["plot_area_sqm", "bua_sqm", "fsi_used", "zonal_basic_fsi", "use"]
+        "type": "function",
+        "function": {
+            "name": "resolve_clearances",
+            "description": "Given plot spatial context and derived design parameters, return all triggered clearances with fees, timelines, and risk levels.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "height_m": {"type": "number"},
+                    "bua_sq_m": {"type": "number"},
+                    "plot_area_sq_m": {"type": "number"},
+                    "distance_to_csia_km": {"type": "number"},
+                    "distance_to_coast_km": {"type": "number"},
+                    "ward": {"type": "string"},
+                    "use": {"type": "string"}
+                },
+                "required": ["height_m", "bua_sq_m", "plot_area_sq_m", "use"]
+            }
         }
     },
     {
-        "name": "calculate_professional_fees",
-        "description": "Calculate architect, PMC, legal, liaison fees based on construction cost and project complexity.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "base_construction_cost": {"type": "number"},
-                "ec_triggered": {"type": "boolean"},
-                "heritage_triggered": {"type": "boolean"}
-            },
-            "required": ["base_construction_cost"]
+        "type": "function",
+        "function": {
+            "name": "calculate_government_premiums",
+            "description": "Calculate all government levies — premium FSI charge, fungible premium, development cess, infrastructure charges, IOD/CC/OC fees, labour cess.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "plot_area_sq_m": {"type": "number"},
+                    "bua_sq_m": {"type": "number"},
+                    "fsi_used": {"type": "number"},
+                    "zonal_basic_fsi": {"type": "number"},
+                    "fungible_sq_m": {"type": "number"},
+                    "use": {"type": "string"},
+                    "asr_rate_per_sq_m": {"type": "number"}
+                },
+                "required": ["plot_area_sq_m", "bua_sq_m", "fsi_used", "zonal_basic_fsi", "use"]
+            }
         }
     },
     {
-        "name": "calculate_financing_cost",
-        "description": "Calculate financing drag from clearance timelines on land cost.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "land_cost": {"type": "number"},
-                "max_clearance_days": {"type": "integer"},
-                "interest_rate_pct": {"type": "number"}
-            },
-            "required": ["land_cost", "max_clearance_days"]
+        "type": "function",
+        "function": {
+            "name": "calculate_professional_fees",
+            "description": "Calculate architect, PMC, legal, liaison fees based on construction cost and project complexity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "base_construction_cost": {"type": "number"},
+                    "ec_triggered": {"type": "boolean"},
+                    "heritage_triggered": {"type": "boolean"}
+                },
+                "required": ["base_construction_cost"]
+            }
         }
     },
     {
-        "name": "generate_report",
-        "description": "Compile all analysis into a structured ProjectReport and save JSON. Returns report summary.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "cts_number": {"type": "string"},
-                "spatial_context": {"type": "object"},
-                "design": {"type": "object"},
-                "clearances": {"type": "array"},
-                "cost_stack": {"type": "object"},
-                "recommendation": {"type": "string"},
-                "risks": {"type": "array"},
-                "output_dir": {"type": "string"}
-            },
-            "required": ["cts_number", "design", "clearances", "cost_stack", "recommendation"]
+        "type": "function",
+        "function": {
+            "name": "calculate_financing_cost",
+            "description": "Calculate financing drag from clearance timelines on land cost.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "land_cost": {"type": "number"},
+                    "max_clearance_days": {"type": "integer"},
+                    "interest_rate_pct": {"type": "number"}
+                },
+                "required": ["land_cost", "max_clearance_days"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_report",
+            "description": "Compile all analysis into a structured ProjectReport and save JSON. Returns report summary.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cts_number": {"type": "string"},
+                    "spatial_context": {"type": "object"},
+                    "design": {"type": "object"},
+                    "clearances": {"type": "array"},
+                    "cost_stack": {"type": "object"},
+                    "recommendation": {"type": "string"},
+                    "risks": {"type": "array"},
+                    "output_dir": {"type": "string"}
+                },
+                "required": ["cts_number", "design", "clearances", "cost_stack", "recommendation"]
+            }
         }
     }
 ]
@@ -327,7 +354,7 @@ def run_agent(
     generate_pdf: bool = False
 ) -> ProjectReport:
     """
-    Run the Project Intelligence Agent with Claude as reasoning engine.
+    Run the Project Intelligence Agent with Groq as reasoning engine.
     
     Args:
         cts_number: CTS number to analyze
@@ -340,19 +367,23 @@ def run_agent(
     Returns:
         ProjectReport object
     """
-    if not ANTHROPIC_AVAILABLE:
-        raise RuntimeError("anthropic package not installed. Install with: pip install anthropic")
+    if not GROQ_AVAILABLE:
+        raise RuntimeError("groq package not installed. Install with: pip install groq")
     
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY environment variable not set")
+        raise RuntimeError("GROQ_API_KEY environment variable not set")
     
-    client = anthropic.Anthropic(api_key=api_key)
+    client = Groq(api_key=api_key)
     
     # Build initial message
     land_cost_str = f"₹{land_cost:,.0f}" if land_cost else "Not provided"
     
     messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        },
         {
             "role": "user",
             "content": f"""Analyze this project:
@@ -368,35 +399,44 @@ Run a complete feasibility analysis. Derive the optimal design, identify all req
     # Agent loop
     while True:
         try:
-            response = client.messages.create(
-                model="claude-opus-4-5",
+            response = client.chat.completions.create(
+                model="llama3-70b-8192",  # Groq model - can also use "mixtral-8x7b-32768"
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
                 tools=TOOLS,
+                tool_choice="auto",
                 messages=messages
             )
         except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
+            logger.error(f"Groq API error: {e}")
             raise
         
+        message = response.choices[0].message
+        
         # Append assistant response to history
-        messages.append({"role": "assistant", "content": response.content})
+        messages.append({
+            "role": "assistant",
+            "content": message.content if message.content else "",
+            "tool_calls": message.tool_calls if hasattr(message, 'tool_calls') else None
+        })
         
         # If no tool calls, agent is done
-        if response.stop_reason == "end_turn":
+        if not hasattr(message, 'tool_calls') or not message.tool_calls:
             break
         
         # Process tool calls
         tool_results = []
-        for block in response.content:
-            if hasattr(block, 'type') and block.type == "tool_use":
-                logger.info(f"Calling tool: {block.name}")
-                result = dispatch_tool(block.name, block.input)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(result)
-                })
+        for tool_call in message.tool_calls:
+            function_name = tool_call.function.name
+            function_args = json.loads(tool_call.function.arguments)
+            
+            logger.info(f"Calling tool: {function_name}")
+            result = dispatch_tool(function_name, function_args)
+            
+            tool_results.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps(result)
+            })
         
         if not tool_results:
             break
@@ -433,35 +473,29 @@ def extract_report(
     risks = []
     
     for msg in messages:
-        if msg.get("role") == "user" and isinstance(msg.get("content"), list):
-            for item in msg["content"]:
-                if isinstance(item, dict) and item.get("type") == "tool_result":
-                    try:
-                        result = json.loads(item["content"])
-                        
-                        if "plot_id" in result or "cts_number" in result:
-                            plot_details = result
-                        elif "distance_to_csia_km" in result:
-                            spatial_context = result
-                        elif "max_permissible_fsi" in result or "zonal_basic_fsi" in result:
-                            design = result
-                        elif isinstance(result, list) and len(result) > 0:
-                            if "name" in result[0] and "timeline_days" in result[0]:
-                                clearances = result
-                        elif "grand_total" in result or "total_government_premiums" in result:
-                            cost_stack = result
-                        elif "recommendation" not in str(result).lower() and isinstance(result, dict):
-                            # Might be recommendation text
-                            pass
-                    except:
-                        pass
-        
-        # Extract recommendation from assistant messages
-        if msg.get("role") == "assistant" and isinstance(msg.get("content"), list):
-            for block in msg["content"]:
-                if hasattr(block, 'type') and block.type == "text":
-                    recommendation = block.text
-                    break
+        if msg.get("role") == "tool":
+            try:
+                result = json.loads(msg["content"])
+                
+                if "plot_id" in result or "cts_number" in result:
+                    plot_details = result
+                elif "distance_to_csia_km" in result:
+                    spatial_context = result
+                elif "max_permissible_fsi" in result or "zonal_basic_fsi" in result:
+                    design = result
+                elif isinstance(result, list) and len(result) > 0:
+                    if "name" in result[0] and "timeline_days" in result[0]:
+                        clearances = result
+                elif "grand_total" in result or "total_government_premiums" in result:
+                    cost_stack = result
+            except:
+                pass
+    
+    # Extract recommendation from assistant messages
+    for msg in messages:
+        if msg.get("role") == "assistant" and msg.get("content"):
+            recommendation = msg["content"]
+            break
     
     # Determine risks from warnings
     if spatial_context and "warnings" in spatial_context:
@@ -516,12 +550,15 @@ class ProjectIntelligenceAgent:
     """High-level agent class for running project analysis."""
     
     def __init__(self, api_key: str = None):
+        if not GROQ_AVAILABLE:
+            raise RuntimeError("groq package not installed")
+        
         if api_key:
-            self.client = anthropic.Anthropic(api_key=api_key)
-        elif os.getenv("ANTHROPIC_API_KEY"):
-            self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            self.client = Groq(api_key=api_key)
+        elif os.getenv("GROQ_API_KEY"):
+            self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         else:
-            raise ValueError("ANTHROPIC_API_KEY required")
+            raise ValueError("GROQ_API_KEY required")
     
     def analyze(
         self,
