@@ -2,7 +2,6 @@
 
 import inquirer from "inquirer";
 import chalk from "chalk";
-import { spawn } from "child_process";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -69,63 +68,70 @@ const GRADES = [
 ];
 
 async function runPythonCommand(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  return new Promise((resolve) => {
-    const proc = spawn("python", ["-m", "feasify", ...args], {
-      cwd: FEASIFY_ROOT,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    proc.stdout?.on("data", (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr?.on("data", (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    proc.on("close", (code) => {
-      resolve({ stdout, stderr, exitCode: code || 0 });
-    });
-
-    setTimeout(() => {
-      proc.kill();
-      resolve({ stdout, stderr: "Timeout", exitCode: 1 });
-    }, 60000);
+  const cmd = args.join(" ");
+  const proc = Bun.spawn({
+    cmd: ["python", "-m", "feasify", ...args],
+    cwd: FEASIFY_ROOT,
+    stdout: "pipe",
+    stderr: "pipe",
   });
+
+  const [stdout, stderr] = await Promise.all([
+    proc.stdout.text(),
+    proc.stderr.text(),
+  ]);
+
+  const exitCode = await proc.exitCode;
+  return { stdout, stderr, exitCode };
 }
 
 function extractJson(text: string): any {
-  const lines = text.split("\n").filter((l) => !l.includes("python :"));
+  // Normalize line endings and remove Python noise
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   
-  // Find first "{" and try to parse from there
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line === "{" || line.startsWith("{")) {
-      const jsonText = lines.slice(i).join("\n");
-      // Try to find matching closing brace
-      let depth = 0;
-      let endIdx = 0;
-      for (let j = 0; j < jsonText.length; j++) {
-        if (jsonText[j] === "{") depth++;
-        if (jsonText[j] === "}") {
-          depth--;
-          if (depth === 0) {
-            endIdx = j + 1;
-            break;
-          }
-        }
-      }
-      if (endIdx > 0) {
-        try {
-          return JSON.parse(jsonText.substring(0, endIdx));
-        } catch (e) {}
+  const lines = normalized.split("\n").filter((l) => 
+    !l.includes("python :") && 
+    !l.includes("Traceback") &&
+    !l.includes('File "') &&
+    !l.includes("reportlab")
+  );
+  
+  let combined = lines.join("\n");
+  
+  // Fix newlines INSIDE string values - apply multiple times for multi-line strings
+  let prev = "";
+  while (prev !== combined) {
+    prev = combined;
+    combined = combined.replace(/"([^"]*)\n([^"]*)"/g, (match, p1, p2) => `"${p1}${p2}"`);
+  }
+  
+  // Find first "{"
+  const startIdx = combined.indexOf("{");
+  if (startIdx === -1) return null;
+  
+  // Find the end by counting braces
+  let depth = 0;
+  let endIdx = -1;
+  for (let i = startIdx; i < combined.length; i++) {
+    if (combined[i] === "{") depth++;
+    else if (combined[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        endIdx = i + 1;
+        break;
       }
     }
   }
-  return null;
+  
+  if (endIdx === -1) return null;
+  
+  const jsonText = combined.substring(startIdx, endIdx);
+  
+  try {
+    return JSON.parse(jsonText);
+  } catch (e) {
+    return null;
+  }
 }
 
 function formatCurrency(value: number | undefined): string {
@@ -134,6 +140,67 @@ function formatCurrency(value: number | undefined): string {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  
+  // Demo mode if no TTY
+  if (!process.stdin.isTTY) {
+    console.clear();
+    console.log(chalk.bold.cyan("\n=== FEASIFY FSI FEASIBILITY CLI ===\n"));
+    console.log(chalk.yellow("Demo Mode - Using sample values:\n"));
+    
+    // Sample values for demo
+    const plotArea = 1180;
+    const zone = "suburbs";
+    const use = "residential";
+    const roadWidth = 60;
+    const floors = 21;
+    const finish = "premium";
+    const landCost = 500000000;
+    
+    console.log(`  Plot Area: ${plotArea} sq.m`);
+    console.log(`  Zone: ${zone}`);
+    console.log(`  Use: ${use}`);
+    console.log(`  Road Width: ${roadWidth}m`);
+    console.log(`  Floors: ${floors}`);
+    console.log(`  Grade: ${finish}`);
+    console.log(`  Land Cost: ₹${(landCost/10000000).toFixed(0)} Cr\n`);
+    
+    // Run same analysis
+    process.stdout.write(chalk.gray("  → DCPR-2034 feasibility... "));
+    const feaResult = await runPythonCommand([
+      "feasibility", plotArea.toString(), zone, use, roadWidth.toString(), floors.toString(), "--json"
+    ]);
+    const feasibility = extractJson(feaResult.stdout + feaResult.stderr);
+    if (!feasibility) { 
+      console.error(chalk.red("FAILED"));
+      return; 
+    }
+    console.log(chalk.green("✓"));
+
+    process.stdout.write(chalk.gray("  → Calculating clearances... "));
+    const clearResult = await runPythonCommand([
+      "clearances", feasibility.approx_height_m.toFixed(1), feasibility.permissible_bua_sqm.toFixed(1),
+      plotArea.toString(), use, "--json"
+    ]);
+    const clearances = extractJson(clearResult.stdout + clearResult.stderr);
+    console.log(chalk.green("✓"));
+
+    process.stdout.write(chalk.gray("  → Building cost stack... "));
+    const costResult = await runPythonCommand([
+      "cost", feasibility.permissible_bua_sqft.toFixed(1), zone, floors.toString(), use,
+      "--finish", finish, "--land-cost", landCost.toString(), "--json"
+    ]);
+    const cost = extractJson(costResult.stdout + costResult.stderr);
+    console.log(chalk.green("✓"));
+
+    displayResults(feasibility, clearances, cost);
+    
+    console.log(chalk.gray("\nRun with terminal for interactive mode:\n"));
+    console.log(chalk.cyan("  cd cli && bun run start\n"));
+    return;
+  }
+  
+  // Interactive mode
   console.clear();
   console.log(chalk.bold.cyan("\n=== FEASIFY FSI FEASIBILITY CLI ===\n"));
 
