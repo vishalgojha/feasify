@@ -96,6 +96,76 @@ def version():
     console.print(f"Feasify version: {__version__}")
 
 
+@app.command()
+def swarm(
+    cts_number: str = typer.Argument(..., help="CTS number to analyze"),
+    zone: str = typer.Argument(..., help="Zone: island_city/suburbs/extended_suburbs/barc_area"),
+    use: str = typer.Option("residential", help="Use type: residential/commercial/industrial"),
+    road_width: float = typer.Option(12.0, help="Road width in meters"),
+    plot_area: float = typer.Option(1000.0, help="Plot area in sq.m"),
+    land_cost: float = typer.Option(0.0, help="Land cost in INR"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+):
+    """Run multi-agent swarm analysis (Planner, DCPR, Spatial, Cost, Reviewer)."""
+    from feasify.swarm import FeasifySwarm
+    
+    with console.status("[bold green]Running Feasify Swarm..."):
+        try:
+            swarm = FeasifySwarm()
+            result = swarm.analyze(
+                cts_number=cts_number,
+                zone=zone,
+                road_width_m=road_width,
+                use=use,
+                plot_area_sqm=plot_area,
+                land_cost=land_cost,
+            )
+        except Exception as e:
+            if json_output:
+                console.print(json.dumps({"error": str(e)}))
+            else:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+            raise typer.Exit(1)
+    
+    if json_output:
+        import json
+        console.print(json.dumps(result, indent=2, default=str))
+        return
+    
+    from rich.panel import Panel
+    
+    verdict = result.get("verdict", "UNKNOWN")
+    verdict_color = {"VIABLE": "green", "MARGINAL": "yellow", "BLOCKED": "red"}.get(verdict, "white")
+    
+    console.print(Panel.fit(
+        f"[bold {verdict_color}]VERDICT: {verdict}[/bold {verdict_color}]",
+        title="Feasify Swarm Report",
+        border_style=verdict_color
+    ))
+    
+    fsi = result.get("fsi_summary", {})
+    if fsi:
+        table = Table(title="FSI Analysis")
+        table.add_column("Component", style="cyan")
+        table.add_column("FSI", style="green", justify="right")
+        table.add_row("Base", f"{fsi.get('base', 0):.2f}")
+        table.add_row("Premium", f"{fsi.get('premium', 0):.2f}")
+        table.add_row("TDR", f"{fsi.get('tdr', 0):.2f}")
+        table.add_row("Total", f"{fsi.get('total', 0):.2f}")
+        console.print(table)
+        console.print(f"Max Buildable: {fsi.get('max_buildable_sqm', 0):,.0f} sq.m")
+    
+    cost = result.get("cost_summary", {})
+    if cost:
+        console.print(f"\nTotal Cost: ₹{cost.get('total', 0):,.0f}")
+        console.print(f"Cost/sq.ft: ₹{cost.get('cost_per_sqft', 0):,.0f}")
+    
+    if result.get('can_proceed'):
+        console.print("\n[bold green]✓ Project can proceed[/bold green]")
+    else:
+        console.print("\n[bold red]✗ Project has issues[/bold red]")
+
+
 # Browser automation commands
 @app.command()
 def browser_start():
