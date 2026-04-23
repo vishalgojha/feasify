@@ -12,24 +12,11 @@ class LLMClient:
         self.config = config
         self.groq_client = None
         self.gemini_client = None
-        self.anthropic_client = None
         
         self._init_clients()
     
     def _init_clients(self):
-        # Groq (fast fallback)
-        try:
-            from groq import Groq
-            api_key = os.getenv("GROQ_API_KEY")
-            if api_key:
-                self.groq_client = Groq(api_key=api_key)
-                logger.info("Groq client initialized")
-        except ImportError:
-            logger.warning("groq not installed")
-        except Exception as e:
-            logger.warning(f"Groq init failed: {e}")
-        
-        # Gemini (primary - fast and capable)
+        # Gemini (primary - best value)
         try:
             from google import genai
             api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -42,17 +29,17 @@ class LLMClient:
         except Exception as e:
             logger.warning(f"Gemini init failed: {e}")
         
-        # Anthropic (optional - best quality)
+        # Groq (fallback - fast)
         try:
-            import anthropic
-            api_key = os.getenv("ANTHROPIC_API_KEY")
+            from groq import Groq
+            api_key = os.getenv("GROQ_API_KEY")
             if api_key:
-                self.anthropic_client = anthropic.Anthropic(api_key=api_key)
-                logger.info("Anthropic client initialized")
+                self.groq_client = Groq(api_key=api_key)
+                logger.info("Groq client initialized")
         except ImportError:
-            logger.warning("anthropic not installed")
+            logger.warning("groq not installed")
         except Exception as e:
-            logger.warning(f"Anthropic init failed: {e}")
+            logger.warning(f"Groq init failed: {e}")
     
     def generate(
         self,
@@ -87,17 +74,6 @@ class LLMClient:
             except Exception as e:
                 errors.append(f"Groq: {e}")
                 logger.debug(f"Groq failed: {e}")
-        
-        # 3. Anthropic (last resort - best quality)
-        if self.anthropic_client:
-            try:
-                result = self._anthropic_generate(prompt, system, max_tokens, temperature)
-                if result:
-                    logger.info("LLM: Anthropic response")
-                    return result
-            except Exception as e:
-                errors.append(f"Anthropic: {e}")
-                logger.debug(f"Anthropic failed: {e}")
         
         raise RuntimeError(f"All LLM providers failed: {errors}")
     
@@ -148,25 +124,6 @@ class LLMClient:
         )
         
         return response.choices[0].message.content
-    
-    def _anthropic_generate(
-        self,
-        prompt: str,
-        system: str,
-        max_tokens: int,
-        temperature: float,
-    ) -> Optional[str]:
-        if not self.anthropic_client:
-            return None
-        
-        response = self.anthropic_client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        
-        return response.content[0].text
     
     def generate_json(
         self,
@@ -238,8 +195,6 @@ class LLMClient:
             providers.append("gemini")
         if self.groq_client:
             providers.append("groq")
-        if self.anthropic_client:
-            providers.append("anthropic")
         return providers
 
 
