@@ -30,6 +30,34 @@ def estimate(
     console.print(table)
 
 @app.command()
+def analyze(
+    cts_number: str = typer.Argument(..., help="CTS number to analyze"),
+    use_type: str = typer.Argument(..., help="Proposed use: residential/commercial/industrial"),
+    land_cost: float = typer.Option(None, help="Land cost in ₹ (optional)"),
+    finish: str = typer.Option("standard", help="Construction grade: basic/standard/premium"),
+    output_dir: str = typer.Option("data/reports", help="Output directory for reports"),
+    pdf: bool = typer.Option(False, help="Generate PDF report")
+):
+    """Run AI-powered project feasibility analysis using Claude."""
+    from feasify.agents import run_agent
+    from feasify.agents.project_intelligence import run_agent as run_agent_direct
+    
+    with console.status("[bold green]Running Project Intelligence Agent with Claude..."):
+        try:
+            report = run_agent_direct(
+                cts_number=cts_number,
+                use_type=use_type,
+                land_cost=land_cost,
+                finish_grade=finish,
+                output_dir=output_dir,
+                generate_pdf=pdf
+            )
+            console.print("\n[bold green]✓ Analysis complete![/bold green]")
+        except Exception as e:
+            console.print(f"\n[bold red]Error: {e}[/bold red]")
+            raise typer.Exit(1)
+
+@app.command()
 def fetch(
     plot_id: str = typer.Argument(..., help="Plot ID or CTS number"),
     source: str = typer.Option("mcgm", help="Data source (mcgm/dp)")
