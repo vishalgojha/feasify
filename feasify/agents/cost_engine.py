@@ -7,13 +7,16 @@ from feasify.agents.constants import (
     ZONE_MULTIPLIERS,
     AAI_NOC_FEES,
     MCGM_INFRA_LEVY_PER_SQM,
-    MCgm_DEVELOPMENT_CESS_PCT,
+    MCGM_DEVELOPMENT_CESS_PCT,
     ARCHITECT_FEE_PCT,
     PMC_FEE_PCT,
     LEGAL_FEE_FLAT,
     LIAISON_FEE_PCT,
     LABOUR_CESS_PCT,
     GST_PCT,
+)
+from feasify.agents.live_rates import (
+    fetch_live_construction_cost as live_cost_calculator,
 )
 import logging
 
@@ -200,14 +203,32 @@ def build_cost_stack(
     fungible_sqm: float = 0.0,
     plot_area_sqm: float = 1000.0,
     use: str = "residential",
-    max_clearance_days: int = 90
+    max_clearance_days: int = 90,
+    use_live_rates: bool = True
 ) -> Dict[str, Any]:
     """
     Build complete cost stack with all line items.
+    Uses live rates if available, falls back to PWD_RATES.
     
     Returns:
         Dictionary with full cost breakdown
     """
+    # Use live rates if requested
+    if use_live_rates:
+        try:
+            from feasify.agents.live_rates import calculate_live_construction_cost
+            live = calculate_live_construction_cost(
+                area_sqft=bua_sqft,
+                zone_type=zone_type,
+                num_floors=num_floors,
+                finish_grade=finish_grade,
+                use_live_rates=True
+            )
+            # Override with live rate calculation
+            base_construction_cost = live["total_cost"]
+        except Exception as e:
+            logger.warning(f"Failed to fetch live rates: {e}. Using PWD rates.")
+    
     # Government premiums
     gov_premiums = calculate_government_premiums(
         plot_area_sqm, bua_sqft / 10.764, fsi_used, zonal_basic_fsi, fungible_sqm, use
@@ -240,11 +261,13 @@ def build_cost_stack(
         financing["financing_cost"]
     )
     
-    return {
+    result = {
         "land_cost": round(land_cost, 2),
         "construction": {
             "base_construction": round(base_construction_cost, 2),
             "total_construction": round(total_construction, 2),
+            "rate_source": live["rate_source"] if use_live_rates else "PWD_RATES",
+            "material_prices": live.get("material_prices") if use_live_rates else None,
         },
         "government_premiums": gov_premiums,
         "professional_fees": prof_fees,
@@ -261,3 +284,4 @@ def build_cost_stack(
         "cost_per_sqft": round(grand_total / bua_sqft, 2) if bua_sqft > 0 else 0,
         "cost_per_sqm": round(grand_total / (bua_sqft / 10.764), 2) if bua_sqft > 0 else 0,
     }
+    return result

@@ -205,6 +205,24 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "fetch_live_construction_cost",
+            "description": "Fetch live construction cost data from BMT CPR, material price indices, and labour rates. Returns cost breakdown with current market rates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area_sqft": {"type": "number"},
+                    "zone_type": {"type": "string"},
+                    "num_floors": {"type": "integer"},
+                    "finish_grade": {"type": "string", "enum": ["basic", "standard", "premium"]},
+                    "use_live_rates": {"type": "boolean"}
+                },
+                "required": ["area_sqft", "zone_type", "num_floors"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generate_report",
             "description": "Compile all analysis into a structured ProjectReport and save JSON. Returns report summary.",
             "parameters": {
@@ -321,6 +339,15 @@ def dispatch_tool(name: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
                 land_cost=inputs["land_cost"],
                 max_clearance_days=inputs["max_clearance_days"],
                 interest_rate_pct=inputs.get("interest_rate_pct", 12.0)
+            )
+        
+        elif name == "fetch_live_construction_cost":
+            return live_cost_calculator(
+                area_sqft=inputs["area_sqft"],
+                zone_type=inputs["zone_type"],
+                num_floors=inputs["num_floors"],
+                finish_grade=inputs.get("finish_grade", "standard"),
+                use_live_rates=inputs.get("use_live_rates", True)
             )
         
         elif name == "generate_report":
