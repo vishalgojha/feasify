@@ -1,90 +1,59 @@
 # Feasify
 
-Real estate FSI feasibility analysis tool for Mumbai, integrating DCPR-2034 compliance, government premiums, clearance tracking, and project cost estimation.
-
-## Features
-
-- **DCPR-2034 Feasibility** - Full Mumbai Development Control regulations analysis
-- **Clearance Engine** - Required clearances, timelines, fees, and critical path
-- **Cost Stack** - Complete project cost calculation with government premiums
-- **Interactive CLI** - User-friendly Bun-powered command-line interface
-- **REST API** - HTTP server for programmatic access
-- **Groq AI Agent** - Optional AI-powered analysis (requires API key)
+AI-powered real estate feasibility analysis for Mumbai real estate projects. Analyzes DCPR-2034 compliance, government premiums, clearances, and project costs using multi-agent AI orchestration.
 
 ## Quick Start
 
-### Python CLI
+```bash
+# Install
+pip install -r requirements.txt
+
+# Launch with guided setup
+python -m feasify welcome
+
+# Or just open the web UI
+python -m feasify studio
+```
+
+## Features
+
+- **DCPR-2034 Analysis** - Full Mumbai Development Control regulations compliance
+- **Multi-Agent AI** - 5 specialized agents: Planner, DCPR Expert, Spatial Risk, Cost Engineer, Reviewer
+- **Web UI** - Beautiful Streamlit interface for non-technical users
+- **Interactive CLI** - Bun-powered CLI with demo mode
+- **Cost Stack** - Complete project cost calculation with government premiums
+- **Clearance Tracking** - Required clearances with critical path analysis
+
+## Commands
+
+### Web UI (Recommended)
+```bash
+python -m feasify welcome   # Launch with guided setup + auto-open browser
+python -m feasify studio    # Just open the web UI
+```
+
+### CLI
 ```bash
 # Feasibility analysis
-python -m feasify feasibility 1180 suburbs residential 60 21
-
-# Get JSON output
-python -m feasify feasibility 1180 suburbs residential 60 21 --json
-```
-
-### Bun Interactive CLI
-```bash
-cd cli
-bun run start
-```
-
-### API Server
-```bash
-cd cli
-bun run server
-# Opens at http://localhost:3000
-```
-
-## CLI Commands
-
-### Core Analysis
-
-```bash
-# 1. Feasibility (DCPR-2034)
-python -m feasify feasibility PLOT_AREA ZONE USE ROAD_WIDTH FLOORS [--json]
 python -m feasify feasibility 1180 suburbs residential 60 21 --json
 
-# 2. Cost Stack
-python -m feasify cost BUA_SQFT ZONE FLOORS [USE] [--finish] [--land-cost] [--json]
+# Cost calculation
 python -m feasify cost 31754 suburbs 21 residential --finish premium --json
 
-# 3. Clearances
-python -m feasify clearances HEIGHT_M BUA_SQM PLOT_AREA [USE] [--json]
+# Clearances
 python -m feasify clearances 63 2950 1180 residential --json
 
-# 4. Quick Estimate
-python -m feasify estimate AREA ZONE [--floors]
-python -m feasify estimate 10000 residential --floors 10
-
-# 5. Fetch Plot Data
-python -m feasify fetch CTS_NUMBER [--source mcgm|dp]
-
-# 6. AI Analysis (requires GROQ_API_KEY)
-python -m feasify analyze CTS_NUMBER USE_TYPE [--json]
+# Swarm analysis (multi-agent)
+python -m feasify swarm 1234/567 suburbs --json
 ```
 
-### Options
-
-| Command | Description |
-|---------|-------------|
-| `--json` | Output JSON for CLI integration |
-| `--finish` | Construction grade: basic/standard/premium |
-| `--land-cost` | Land cost in ₹ for financing calculation |
-| `--floors` | Number of floors |
-| `--pdf` | Generate PDF report |
-| `--source` | Data source: mcgm or dp |
-
-## Bun CLI Commands
-
+### Bun CLI (Interactive)
 ```bash
-cd cli
-
-bun run start      # Interactive CLI with prompts
-bun run server     # HTTP API server on port 3000
-bun run dev        # Watch mode for development
+cd cli && bun run start     # Interactive CLI
+cd cli && bun run server    # API server (port 3000)
 ```
 
-## API Endpoints
+## API Endpoints (Bun Server)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -93,70 +62,77 @@ bun run dev        # Watch mode for development
 | GET | `/api/feasibility` | DCPR-2034 analysis |
 | GET | `/api/clearances` | Required clearances |
 | GET | `/api/cost` | Cost calculation |
-| POST | `/api/analyze` | Full project analysis |
-
-### API Example
-```bash
-curl -X POST "http://localhost:3000/api/analyze" \
-  -H "Content-Type: application/json" \
-  -d '{"plot_area_sqm":1180,"zone":"suburbs","use":"residential","road_width_m":60,"floors":21}'
-```
+| POST | `/api/analyze` | Full analysis |
 
 ## Project Structure
 
 ```
 feasify/
-├── cli/                    # Bun CLI (interactive + API server)
-│   ├── index.ts           # Interactive CLI
-│   └── server.ts          # HTTP API server
-├── feasify/               # Python package
-│   ├── agents/            # AI agent and cost engine
-│   ├── core/              # Estimator, fetcher
-│   ├── knowledge/         # DCPR-2034 knowledge base
-│   └── main.py            # CLI entry point
-├── data/                   # Local data storage
-└── tests/                  # Test suite
+├── swarm/              # Multi-agent AI system
+│   ├── swarm.py         # Orchestrator
+│   ├── state.py         # State management
+│   ├── llm.py           # LLM client (Gemini + Groq)
+│   ├── prompts.py       # Agent system prompts
+│   └── *.py             # Agent implementations
+├── studio/              # Web UI (Streamlit)
+│   └── app.py           # Feasify Studio
+├── cli/                  # Bun CLI
+│   ├── index.ts         # Interactive CLI
+│   └── server.ts        # API server
+├── agents/              # Legacy AI agents
+├── knowledge/           # DCPR-2034 knowledge base
+└── main.py              # Python CLI
+```
+
+## AI Agents
+
+| Agent | Role |
+|-------|------|
+| **Planner** | Orchestrates workflow, synthesizes reports |
+| **DCPR Expert** | FSI calculations, regulation sections |
+| **Spatial Risk** | CRZ, aviation, heritage, DP reservations |
+| **Cost Engineer** | Full cost stack, revenue model |
+| **Reviewer** | Quality control, arithmetic verification |
+
+## API Keys
+
+Get free API keys:
+
+- **Google AI (Gemini)** - [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) (recommended - free tier)
+- **Groq** - [console.groq.com/keys](https://console.groq.com/keys) (fast backup)
+
+Set in `.env` file:
+```
+GOOGLE_API_KEY=your_key_here
 ```
 
 ## Setup
 
 ```bash
-# Clone and setup
-cd feaisfy
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# or
+.venv\Scripts\activate     # Windows
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
-export GROQ_API_KEY=your_key_here  # Optional, for AI analysis
+# Set API key
+export GOOGLE_API_KEY=your_key  # Linux/Mac
+set GOOGLE_API_KEY=your_key      # Windows
 
-# Run CLI
-python -m feasify feasibility 1180 suburbs residential 60 21
+# Launch
+python -m feasify welcome
 ```
 
-## DCPR-2034 Coverage
+## Requirements
 
-- **FSI Tables**: Island City, Suburbs, Extended Suburbs, BARC Area
-- **Setback Rules**: Height-based for small/large plots
-- **Height Regulations**: 3×(road+setback) rule
-- **Parking Norms**: Residential, Commercial, Industrial
-- **Fungible Area**: Up to 35% bonus area
-- **Premium FSI**: 50% for residential, 60% for commercial
-
-## Testing
-
-```bash
-# Python tests
-pytest tests/ -v
-
-# CLI build test
-cd cli && bun build index.ts --target=bun
-```
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `GROQ_API_KEY` | Groq API key for AI agent |
-| `PYTHONIOENCODING` | Set to `utf-8` for Unicode support |
+- Python 3.9+
+- Rich (CLI formatting)
+- Groq or Google AI SDK
+- Streamlit (for web UI)
+- Bun (optional, for native CLI)
 
 ## License
 
