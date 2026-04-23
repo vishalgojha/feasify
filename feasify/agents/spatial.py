@@ -56,15 +56,41 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
 def get_coordinates_from_address(address: str) -> Optional[Tuple[float, float]]:
     """
-    Geocode address to lat/lng using geopy or similar.
-    Placeholder - in production, use Google Maps API or similar.
+    Geocode address to lat/lng using geopy Nominatim.
     
-    REAL_SELECTOR_NEEDED: Implement actual geocoding
-    Options: geopy with Nominatim, Google Geocoding API, MapMyIndia API
+    Args:
+        address: Property address to geocode
+    
+    Returns:
+        (lat, lng) tuple or None on failure
     """
-    # Placeholder: Mumbai approximate center
-    logger.warning(f"Geocoding not implemented. Using Mumbai center for {address}")
-    return (19.0760, 72.8777)  # Mumbai approximate center
+    try:
+        from geopy.geocoders import Nominatim
+        from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+        import time
+        
+        geocoder = Nominatim(user_agent="feasify")
+        
+        # Geocode with India country bias
+        location = geocoder.geocode(address, country_codes="in")
+        
+        if location:
+            time.sleep(1)  # Nominatim ToS: max 1 request per second
+            logger.info(f"Geocoded '{address}' -> ({location.latitude}, {location.longitude})")
+            return (location.latitude, location.longitude)
+        else:
+            logger.warning(f"Geocoding returned no results for: {address}")
+            return None
+            
+    except ImportError:
+        logger.warning("geopy not installed. Install with: pip install geopy")
+        return None
+    except (GeocoderTimedOut, GeocoderServiceError) as e:
+        logger.error(f"Geocoding service error for {address}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Geocoding failed for {address}: {e}")
+        return None
 
 
 def get_spatial_context(

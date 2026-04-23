@@ -35,6 +35,10 @@ DP_ZONE_SELECTORS = {
 }
 
 
+# TODO: Verify selectors against live portal before setting USE_MOCK_DATA=False
+# Set USE_MOCK_DATA=False only after verifying live portal selectors
+# Live portals: https://ptaxportal.mcgm.gov.in
+
 class MCGMScraper:
     """Scraper for Mumbai Municipal Corporation (MCGM) Property Tax Portal."""
     
@@ -45,48 +49,12 @@ class MCGMScraper:
         self.cache_dir = Path(settings.CACHE_DIR) / "mcgm"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
     
-    def _get_cache_path(self, plot_id: str) -> Path:
-        """Get cache file path for a plot ID."""
-        safe_id = "".join(c for c in plot_id if c.isalnum() or c in "_-").strip()
-        return self.cache_dir / f"{safe_id}.json"
-    
-    def _get_cached(self, plot_id: str) -> Optional[Dict]:
-        """Get cached plot data if not expired."""
-        cache_file = self._get_cache_path(plot_id)
-        if cache_file.exists():
-            # Check TTL
-            if (datetime.now().timestamp() - cache_file.stat().st_mtime) < settings.CACHE_TTL:
-                try:
-                    with open(cache_file, 'r') as f:
-                        return json.load(f)
-                except Exception as e:
-                    logger.warning(f"Cache read error for {plot_id}: {e}")
-        return None
-    
-    def _save_cache(self, plot_id: str, data: Dict):
-        """Save plot data to cache."""
-        cache_file = self._get_cache_path(plot_id)
-        try:
-            with open(cache_file, 'w') as f:
-                json.dump({"timestamp": datetime.now().isoformat(), "data": data}, f)
-        except Exception as e:
-            logger.warning(f"Cache write error for {plot_id}: {e}")
-    
     def fetch_plot_details(self, plot_id: str) -> Dict[str, Any]:
-        """
-        Fetch plot details from MCGM Property Tax Portal.
-        
-        Args:
-            plot_id: CTS number or plot ID
-        
-        Returns:
-            Dictionary with plot details matching CTS dataclass
-        """
-        # Check cache first
-        cached = self._get_cached(plot_id)
-        if cached:
-            logger.info(f"Using cached data for {plot_id}")
-            return cached["data"]
+        """Fetch plot details from MCGM Property Tax Portal."""
+        # Use mock data if configured
+        if settings.USE_MOCK_DATA:
+            mock = MockMCGMScraper()
+            return mock.fetch_plot_details(plot_id)
         
         result = {
             "plot_id": plot_id,

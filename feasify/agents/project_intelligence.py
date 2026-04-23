@@ -462,7 +462,7 @@ Run a complete feasibility analysis. Derive the optimal design, identify all req
             tool_results.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "content": json.dumps(result)
+                "content": json.dumps({"_tool": function_name, "result": result})
             })
         
         if not tool_results:
@@ -502,22 +502,35 @@ def extract_report(
     for msg in messages:
         if msg.get("role") == "tool":
             try:
-                result = json.loads(msg["content"])
+                data = json.loads(msg["content"])
+                tool_name = data.get("_tool")
+                actual_result = data.get("result", data)
                 
-                if "plot_id" in result or "cts_number" in result:
-                    plot_details = result
-                elif "distance_to_csia_km" in result:
-                    spatial_context = result
-                elif "max_permissible_fsi" in result or "zonal_basic_fsi" in result:
-                    design = result
-                elif isinstance(result, list) and len(result) > 0:
-                    if "name" in result[0] and "timeline_days" in result[0]:
-                        clearances = result
-                elif "grand_total" in result or "total_government_premiums" in result:
-                    cost_stack = result
-            except:
-                pass
-    
+                if tool_name == "resolve_cts":
+                    plot_details = actual_result
+                elif tool_name == "get_spatial_context":
+                    spatial_context = actual_result
+                elif tool_name == "calculate_feasibility":
+                    design = actual_result
+                elif tool_name == "fetch_live_construction_cost":
+                    # Merge into design or cost_stack
+                    if "base_cost" in actual_result:
+                        design.update(actual_result)
+                elif tool_name == "resolve_clearances":
+                    clearances = actual_result
+                elif tool_name == "calculate_government_premiums":
+                    design["government_premiums"] = actual_result
+                elif tool_name == "calculate_professional_fees":
+                    design["professional_fees"] = actual_result
+                elif tool_name == "calculate_financing_cost":
+                    design["financing"] = actual_result
+                elif tool_name == "fetch_live_construction_cost":
+                    cost_stack["live_rates"] = actual_result
+                elif tool_name == "generate_report":
+                    pass  # Handled separately
+            except Exception as e:
+                logger.warning(f"Failed to parse tool result: {e}")
+        
     # Extract recommendation from assistant messages
     for msg in messages:
         if msg.get("role") == "assistant" and msg.get("content"):

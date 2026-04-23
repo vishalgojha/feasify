@@ -14,8 +14,9 @@ class Settings:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./feasify.db")
     
     # MCGM/DP Scraper
-    MCGM_BASE_URL: str = os.getenv("MCGM_BASE_URL", "https://mcgm.gov.in")
-    DP_BASE_URL: str = os.getenv("DP_BASE_URL", "https://dp.mcgm.gov.in")
+    MCGM_BASE_URL: str = os.getenv("MCGM_BASE_URL", "https://ptaxportal.mcgm.gov.in")
+    DP_BASE_URL: str = os.getenv("DP_BASE_URL", "https://udri.mcgm.gov.in")
+    USE_MOCK_DATA: bool = os.getenv("USE_MOCK_DATA", "False").lower() == "true"
     
     # PWD Rates
     PWD_RATES_URL: str = os.getenv("PWD_RATES_URL", "https://pwd.maharashtra.gov.in/rates")

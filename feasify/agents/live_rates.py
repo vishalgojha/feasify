@@ -1,4 +1,4 @@
-"""Live construction cost data fetchers - BMT CPR, material prices, labour indices."""
+"""Construction cost data - live rates and material indices."""
 import requests
 from bs4 import BeautifulSoup
 from typing import Dict, Any, Optional
@@ -50,171 +50,94 @@ def _set_cache(key: str, data: Dict):
         logger.warning(f"Cache write error for {key}: {e}")
 
 
-def fetch_bmt_cpr_rates(material_type: str = "cement") -> Dict[str, Any]:
+def get_construction_rates(use_live: bool = False) -> Dict[str, Any]:
     """
-    Fetch BMT CPR (Contractor Price Rate) data.
-    REAL_SELECTOR_NEEDED: Verify BMT portal structure.
+    Get construction rates - live or placeholder.
     
     Args:
-        material_type: cement, steel, sand, aggregate, bricks
+        use_live: If True, attempt live fetch; fall back to placeholder on failure
     
     Returns:
         Dictionary with rates and metadata
     """
-    cache_key = f"bmt_cpr_{material_type}"
-    cached = _get_cached(cache_key)
-    if cached:
-        return cached
+    if not use_live:
+        # Return hardcoded placeholder rates
+        return {
+            "source": "Placeholder Rates",
+            "data_as_of": "2025-01",
+            "is_live": False,
+            "cement": {"rate": 380.0, "unit": "per bag (50kg)", "location": "Mumbai"},
+            "steel": {"rate": 68.0, "unit": "per kg", "location": "Mumbai"},
+            "sand": {"rate": 4500.0, "unit": "per brass (100 CFT)", "location": "Mumbai"},
+            "aggregate_20mm": {"rate": 3200.0, "unit": "per brass (100 CFT)", "location": "Mumbai"},
+            "bricks": {"rate": 7.5, "unit": "per piece", "location": "Mumbai"},
+            "note": "REAL_SELECTOR_NEEDED: Replace with live BMT/cement mart APIs"
+        }
     
-    result = {
-        "source": "BMT CPR",
-        "material_type": material_type,
-        "rate_per_unit": None,
-        "unit": "",
-        "location": "Mumbai",
-        "effective_date": None,
-        "trend": "stable",
-    }
-    
+    # Attempt live fetch
     try:
-        # REAL_SELECTOR_NEEDED: Verify URL and selectors
-        # BMT publishes CPR on their portal - this is a placeholder structure
-        url_map = {
-            "cement": "https://bmt.gov.in/cpr/cement-rates",
-            "steel": "https://bmt.gov.in/cpr/steel-rates",
-            "sand": "https://bmt.gov.in/cpr/sand-rates",
-            "aggregate": "https://bmt.gov.in/cpr/aggregate-rates",
-            "bricks": "https://bmt.gov.in/cpr/brick-rates",
-        }
+        # TODO: Implement live API calls to:
+        # - BMT (https://bmt.gov.in) for official rates
+        # - CementMart API for market prices
+        # - Steel prices from SteelAuthority of India
         
-        url = url_map.get(material_type.lower())
-        if not url:
-            logger.warning(f"Unknown material type: {material_type}")
-            return result
-        
-        # REAL_SELECTOR_NEEDED: Implement actual scraper
-        # Placeholder rates (update when portal is accessible)
-        placeholder_rates = {
-            "cement": {"rate": 380.0, "unit": "per bag (50kg)"},
-            "steel": {"rate": 68.0, "unit": "per kg"},
-            "sand": {"rate": 4500.0, "unit": "per brass (100 CFT)"},
-            "aggregate": {"rate": 3200.0, "unit": "per brass (100 CFT)"},
-            "bricks": {"rate": 7.5, "unit": "per piece"},
-        }
-        
-        if material_type.lower() in placeholder_rates:
-            data = placeholder_rates[material_type.lower()]
-            result["rate_per_unit"] = data["rate"]
-            result["unit"] = data["unit"]
-            result["effective_date"] = datetime.now().strftime("%Y-%m-%d")
-            result["note"] = "REAL_SELECTOR_NEEDED: Scrape live BMT CPR portal"
-        
-        _set_cache(cache_key, result)
+        # Placeholder for now - simulate API failure
+        raise NotImplementedError("Live rate fetch not yet implemented")
         
     except Exception as e:
-        logger.error(f"Error fetching BMT CPR for {material_type}: {e}")
-        result["error"] = str(e)
-    
-    return result
+        logger.warning(f"Live rates fetch failed: {e}")
+        result = get_construction_rates(use_live=False)
+        result["fetch_error"] = str(e)
+        result["is_live"] = False
+        return result
 
 
-def fetch_material_price_index() -> Dict[str, Any]:
+def get_labour_indices(use_live: bool = False) -> Dict[str, Any]:
     """
-    Fetch material price index (cement, steel, etc.).
-    REAL_SELECTOR_NEEDED: Use API or scraper for economic indices.
+    Get labour cost indices.
     
-    Returns:
-        Dictionary with price indices
-    """
-    cache_key = "material_price_index"
-    cached = _get_cached(cache_key)
-    if cached:
-        return cached
-    
-    result = {
-        "source": "Material Price Index",
-        "base_period": "2015-16=100",
-        "indices": {},
-        "last_updated": None,
-        "note": "REAL_SELECTOR_NEEDED: Integrate with SteelAuthority, CementMart APIs"
-    }
-    
-    try:
-        # REAL_SELECTOR_NEEDED: Implement actual API calls
-        # Placeholder indices (Mumbai market)
-        result["indices"] = {
-            "cement": {"current": 185.2, "unit": "per bag (50kg)", "change_pct": 2.3},
-            "steel_tmt": {"current": 68.5, "unit": "per kg", "change_pct": -1.2},
-            "steel_angles": {"current": 72.0, "unit": "per kg", "change_pct": 0.8},
-            "sand": {"current": 4500.0, "unit": "per brass", "change_pct": 5.0},
-            "aggregate_20mm": {"current": 3200.0, "unit": "per brass", "change_pct": 3.2},
-            "bricks": {"current": 7.5, "unit": "per piece", "change_pct": 1.5},
-            "flooring_vitrified": {"current": 65.0, "unit": "per sq.ft.", "change_pct": 0.0},
-            "paint_royal": {"current": 350.0, "unit": "per litre", "change_pct": 2.0},
-        }
-        result["last_updated"] = datetime.now().strftime("%Y-%m-%d")
-        
-        _set_cache(cache_key, result)
-        
-    except Exception as e:
-        logger.error(f"Error fetching material price index: {e}")
-        result["error"] = str(e)
-    
-    return result
-
-
-def fetch_labour_indices() -> Dict[str, Any]:
-    """
-    Fetch labour cost indices.
-    REAL_SELECTOR_NEEDED: Source from Maharashtra labour department.
+    Args:
+        use_live: If True, attempt live fetch; fall back to placeholder
     
     Returns:
         Dictionary with labour rates by skill level
     """
-    cache_key = "labour_indices"
-    cached = _get_cached(cache_key)
-    if cached:
-        return cached
-    
-    result = {
-        "source": "Maharashtra Labour Department",
-        "base_period": "2015-16=100",
-        "rates": {},
-        "last_updated": None,
-        "note": "REAL_SELECTOR_NEEDED: Scrape labour department notices"
-    }
-    
-    try:
-        # REAL_SELECTOR_NEEDED: Implement actual scraper
-        # Placeholder rates (per day, 8 hours)
-        result["rates"] = {
+    if not use_live:
+        return {
+            "source": "Placeholder Indices",
+            "base_period": "2015-16=100",
+            "data_as_of": "2025-01",
+            "is_live": False,
             "unskilled": {"current": 600.0, "unit": "per day", "zone": "Mumbai"},
             "semi_skilled": {"current": 800.0, "unit": "per day", "zone": "Mumbai"},
             "skilled": {"current": 1200.0, "unit": "per day", "zone": "Mumbai"},
             "supervisor": {"current": 1500.0, "unit": "per day", "zone": "Mumbai"},
             "engineer_junior": {"current": 2500.0, "unit": "per day", "zone": "Mumbai"},
             "engineer_senior": {"current": 4000.0, "unit": "per day", "zone": "Mumbai"},
+            "note": "REAL_SELECTOR_NEEDED: Scrape Maharashtra Labour Dept notices"
         }
-        result["last_updated"] = datetime.now().strftime("%Y-%m-%d")
-        
-        _set_cache(cache_key, result)
-        
-    except Exception as e:
-        logger.error(f"Error fetching labour indices: {e}")
-        result["error"] = str(e)
     
-    return result
+    try:
+        # TODO: Implement live scraping from Maharashtra Labour Department
+        raise NotImplementedError("Live labour indices not yet implemented")
+    except Exception as e:
+        logger.warning(f"Live labour indices fetch failed: {e}")
+        result = get_labour_indices(use_live=False)
+        result["fetch_error"] = str(e)
+        return result
 
 
-def fetch_gst_rates() -> Dict[str, Any]:
+def get_gst_rates() -> Dict[str, Any]:
     """
-    Fetch current GST rates for construction materials.
+    Get current GST rates for construction materials.
     
     Returns:
         Dictionary with GST rates by category
     """
     return {
         "source": "CBIC GST Portal",
+        "data_as_of": "2025-01",
+        "is_live": True,  # GST rates are standardized by CBIC
         "rates": {
             "cement": 28.0,
             "steel": 18.0,
@@ -227,7 +150,7 @@ def fetch_gst_rates() -> Dict[str, Any]:
             "plumbing": 18.0,
             "construction_services": 18.0,
         },
-        "note": "GST rates are standardized. Verify at https://cbic.gov.in"
+        "note": "GST rates standardized. Verify at https://cbic.gov.in"
     }
 
 
@@ -255,19 +178,19 @@ def calculate_live_construction_cost(
     
     built_up_area = area_sqft * num_floors
     
-    # Get base rate
-    if use_live_rates:
-        material_index = fetch_material_price_index()
-        labour_index = fetch_labour_indices()
-        
-        # Adjust base rate based on material price trends
+    # Get rates
+    rates = get_construction_rates(use_live=use_live_rates)
+    
+    # Get base rate from PWD or adjust with live rates
+    if use_live_rates and rates.get("is_live"):
+        # Use live material prices to adjust PWD rates
         base_rate = PWD_RATES.get(finish_grade, 1800.0)
         
-        # Apply material price adjustment (if indices available)
-        if "indices" in material_index:
-            cement_index = material_index["indices"].get("cement", {}).get("current", 100.0)
-            adjustment_factor = cement_index / 100.0  # Normalize to base 100
-            base_rate *= (adjustment_factor * 0.3 + 0.7)  # 30% weight to material prices
+        # Adjust based on cement price trends (30% weight)
+        if "cement" in rates:
+            cement_price = rates["cement"].get("current", 380.0)
+            adjustment_factor = cement_price / 380.0  # Normalize to base 380
+            base_rate *= (adjustment_factor * 0.3 + 0.7)
     else:
         base_rate = PWD_RATES.get(finish_grade, 1800.0)
     
@@ -288,12 +211,11 @@ def calculate_live_construction_cost(
         "num_floors": num_floors,
         "finish_grade": finish_grade,
         "rate_per_sqft": round(adjusted_rate, 2),
-        "base_rate_source": "live_rates" if use_live_rates else "PWD_RATES",
+        "base_rate_source": "live_rates" if rates.get("is_live") else "PWD_RATES",
         "base_cost": round(base_cost, 2),
         "contingency": round(contingency, 2),
         "overhead": round(overhead, 2),
         "total_cost": round(total_cost, 2),
-        "material_prices": fetch_material_price_index() if use_live_rates else None,
-        "labour_rates": fetch_labour_indices() if use_live_rates else None,
-        "gst_rates": fetch_gst_rates(),
+        "material_prices": rates if use_live_rates else None,
+        "gst_rates": get_gst_rates(),
     }
