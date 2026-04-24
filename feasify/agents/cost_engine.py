@@ -230,6 +230,33 @@ def build_cost_stack(
             logger.warning(f"Failed to fetch live rates: {e}. Using PWD rates.")
             live = {}
     
+    # Fallback: Calculate using PWD rates if no construction cost provided
+    if base_construction_cost == 0:
+        from feasify.agents.constants import PWD_BASE_RATES, ZONE_MULTIPLIERS
+        
+        # Get base rate for zone
+        zone_key = zone_type.lower() if zone_type else "residential"
+        if zone_key not in PWD_BASE_RATES:
+            zone_key = "residential"
+        
+        base_rate = PWD_BASE_RATES.get(zone_key, PWD_BASE_RATES.get("residential", 1500))
+        
+        # Apply zone multiplier  
+        multiplier = ZONE_MULTIPLIERS.get(zone_key, ZONE_MULTIPLIERS.get("residential", 1.0))
+        
+        # Adjust for finish grade
+        finish_multiplier = {"basic": 0.8, "standard": 1.0, "premium": 1.4}.get(finish_grade, 1.0)
+        
+        adjusted_rate = base_rate * multiplier * finish_multiplier
+        
+        # Calculate construction cost
+        base_construction_cost = bua_sqft * adjusted_rate
+        
+        # Add 15% for contingency + overhead
+        base_construction_cost *= 1.15
+        
+        logger.info(f"Using PWD rates: {adjusted_rate}/sqft x {bua_sqft} sqft = {base_construction_cost}")
+    
     bua_sqm = bua_sqft / 10.764
     
     # Government premiums
