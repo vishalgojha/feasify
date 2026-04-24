@@ -71,6 +71,7 @@ const HTML = `
 `;
 
 interface AnalyzeRequest {
+  cts_number?: string;
   plot_area_sqm: number;
   zone: string;
   use: string;
@@ -187,10 +188,11 @@ const server = serve({
         "cost", String(bua_sqft), String(zone), String(floors), use as string, "--finish", String(finish), "--land-cost", String(land_cost), "--json"
       ]);
 
-      if (result.error) {
-        return Response.json({ error: result.error }, { status: 500 });
+if (result.error) {
+          return Response.json({ error: result.error }, { status: 500 });
+        }
+        return Response.json(result.data);
       }
-      return Response.json(result.data);
     }
 
     if (url.pathname === "/api/analyze" && req.method === "POST") {
@@ -233,13 +235,62 @@ const server = serve({
           "--json"
         ]);
 
-        return Response.json({
+        const result = {
           feasibility,
           clearances: clearancesResult.data,
           cost: costResult.data,
-        });
+        };
+
+        // Save to database
+        const analysisId = crypto.randomUUID();
+        const saveData = {
+          id: analysisId,
+          cts_number: body.cts_number || "",
+          inputs: body,
+          ...result,
+          verdict: "VIABLE",
+        };
+        
+        runPythonCommand(["db-save", "--json", JSON.stringify(saveData)]);
+
+        return Response.json(result);
       } catch (e: any) {
         return Response.json({ error: e.message }, { status: 400 });
+      }
+    }
+
+    if (url.pathname === "/api/report" && req.method === "POST") {
+      try {
+        const body = await req.json();
+        const result = await runPythonCommand([
+          "report", "--json", JSON.stringify(body.result), "--output", `/tmp/feasify_${body.id}.pdf`
+        ]);
+        if (result.error) {
+          return Response.json({ error: result.error }, { status: 500 });
+        }
+        const pdfPath = `/tmp/feasify_${body.id}.pdf`;
+        const pdfFile = Bun.file(pdfPath);
+        if (await pdfFile.exists()) {
+          return new Response(pdfFile, {
+            headers: { "Content-Type": "application/pdf" },
+          });
+        }
+        return Response.json({ message: "PDF generated", path: pdfPath });
+      } catch (e: any) {
+        return Response.json({ error: e.message }, { status: 400 });
+      }
+    }
+
+    if (url.pathname === "/api/history") {
+      const limit = parseQueryParam(url.searchParams.get("limit"), 50);
+      const result = await runPythonCommand(["db-list", "--limit", String(limit), "--json"]);
+      if (result.error) {
+        return Response.json({ error: result.error }, { status: 500 });
+      }
+      try {
+        return Response.json(JSON.parse(result.data));
+      } catch {
+        return Response.json(result.data);
       }
     }
 

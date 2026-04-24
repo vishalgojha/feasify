@@ -470,5 +470,103 @@ def clearances(
     console.print(f"\n[bold]Critical Path:[/bold] {critical_path['total_days']} days")
 
 
+@app.command()
+def report(
+    json_data: str = typer.Option(..., "--json", help="Analysis result JSON string"),
+    output: str = typer.Option("report.pdf", "--output", help="Output PDF path"),
+):
+    """Generate PDF feasibility report from analysis result."""
+    import json
+    from feasify.agents.report import generate_pdf_report, ProjectReport
+    
+    try:
+        data = json.loads(json_data)
+        
+        proj_report = ProjectReport(
+            cts_number=data.get("cts_number", "Unknown"),
+            design=data.get("feasibility", {}),
+            clearances=data.get("clearances", {}).get("clearances", []),
+            cost_stack=data.get("cost", {}),
+        )
+        
+        pdf_path = generate_pdf_report(proj_report)
+        if pdf_path:
+            console.print(f"[green]Report saved to: {pdf_path}[/green]")
+        else:
+            console.print("[red]Failed to generate PDF. Is reportlab installed?[/red]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+@app.command()
+def db_save(
+    json_data: str = typer.Option(..., "--json", help="Analysis result JSON string"),
+):
+    """Save analysis result to SQLite database."""
+    import json
+    from feasify.db.session import get_session
+    from feasify.db.models import AnalysisRecord
+    
+    data = json.loads(json_data)
+    with get_session() as session:
+        record = AnalysisRecord(
+            project_id=data.get("id"),
+            cts_number=data.get("cts_number", ""),
+            zone=data.get("inputs", {}).get("zone", ""),
+            verdict=data.get("verdict", ""),
+            result_json=json_data,
+        )
+        session.add(record)
+        session.commit()
+    console.print(json.dumps({"saved": True}))
+
+
+@app.command()
+def db_list(
+    limit: int = typer.Option(50, "--limit", help="Number of records to fetch"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+):
+    """List analysis records from database."""
+    import json
+    from feasify.db.session import get_session
+    from feasify.db.models import AnalysisRecord
+    
+    with get_session() as session:
+        records = session.query(AnalysisRecord).order_by(
+            AnalysisRecord.created_at.desc()
+        ).limit(limit).all()
+        
+        results = [{
+            "project_id": r.project_id,
+            "cts_number": r.cts_number,
+            "zone": r.zone,
+            "verdict": r.verdict,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        } for r in records]
+    
+    if json_output:
+        console.print(json.dumps(results, default=str, indent=2))
+        return
+    
+    from rich.table import Table
+    table = Table(title="Analysis Records")
+    table.add_column("Project ID", style="cyan")
+    table.add_column("CTS", style="yellow")
+    table.add_column("Zone", style="green")
+    table.add_column("Verdict", style="magenta")
+    table.add_column("Date", style="white")
+    
+    for r in results:
+        table.add_row(
+            r["project_id"] or "-",
+            r["cts_number"] or "-",
+            r["zone"] or "-",
+            r["verdict"] or "-",
+            r["created_at"][:10] if r["created_at"] else "-"
+        )
+    
+    console.print(table)
+
+
 if __name__ == "__main__":
     app()

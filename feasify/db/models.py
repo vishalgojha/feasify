@@ -78,3 +78,16 @@ class ZoningCache(Base):
     height_limit = Column(Float)
     data = Column(Text)  # JSON string
     cached_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AnalysisRecord(Base):
+    """Database model for analysis records."""
+    __tablename__ = "analysis_records"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(String, unique=True, index=True)
+    cts_number = Column(String, index=True)
+    zone = Column(String)
+    verdict = Column(String)
+    result_json = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

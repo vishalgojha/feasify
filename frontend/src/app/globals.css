@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-teal: #0a9396;
+    --brand-navy: #1d3557;
+    --brand-green: #2d6a4f;
+    --brand-yellow: #e9c46a;
+    --brand-orange: #e76f51;
+    --surface-light: #f8f9fa;
+    --surface-dark: #0d1117;
+    --surface-card: #161b22;
+  }
+
+  body {
+    @apply bg-surface-light text-slate-900;
+  }
+}

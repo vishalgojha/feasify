@@ -34,7 +34,7 @@ def estimate_cost(
     adjusted_rate = base_rate * multiplier
     
     # Calculate costs
-    built_up_area = area_sqft * num_floors
+    built_up_area = area_sqft
     base_cost = built_up_area * adjusted_rate
     
     # Add contingencies and overhead

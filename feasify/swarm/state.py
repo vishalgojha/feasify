@@ -147,7 +147,7 @@ class FeasibilityReport:
                 "base": self.fsi_summary.base,
                 "premium": self.fsi_summary.premium,
                 "tdr": self.fsi_summary.tdr,
-                "fungible": self.fungible,
+                "fungible": self.fsi_summary.fungible,
                 "total": self.fsi_summary.total,
                 "max_buildable_sqm": self.fsi_summary.max_buildable_sqm,
                 "saleable_sqm": self.fsi_summary.saleable_sqm,

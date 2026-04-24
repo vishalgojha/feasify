@@ -228,6 +228,7 @@ def build_cost_stack(
             base_construction_cost = live["total_cost"]
         except Exception as e:
             logger.warning(f"Failed to fetch live rates: {e}. Using PWD rates.")
+            live = {}
     
     bua_sqm = bua_sqft / 10.764
     

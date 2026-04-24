@@ -35,6 +35,9 @@ def get_db_context():
     finally:
         db.close()
 
+# Alias for compatibility
+get_session = get_db_context
+
 def init_db():
     """Initialize database by creating all tables."""
     from feasify.db.models import Base
